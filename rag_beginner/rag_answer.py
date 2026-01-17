@@ -70,7 +70,7 @@ def deterministic_stands_for(query: str , contexts: list[dict]):
 if __name__ == "__main__":
     query = "Copy exactly from context: what does RAG stand for?"
     contexts = retrieve(query , k = 5) # type: ignore
-    det = deterministic_stands_for(query , contexts)
+    det = deterministic_stands_for(query , contexts) # type: ignore
     if det is not None:
         print("question ", query)
         print("Answer:", det)
