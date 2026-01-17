@@ -1,0 +1,3 @@
+faiss is a library for effeicient similarity search over dense vecotrs
+it is often used as a local vector index in RAG systems
+RAG stands for RETRIEVAL -AUGUMENTED GENERATION

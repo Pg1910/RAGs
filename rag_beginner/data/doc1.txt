@@ -1,0 +1,3 @@
+hi i am piyush , i am studying RAG in this MEA-ML session
+it works by retrieving documentation , chunking indexing with vector databases and then there is query being called which creates a prompt template and then feeds to the localLLM model
+FAISS is used for storing /retrieving the chunks based embeds from the 
