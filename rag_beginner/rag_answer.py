@@ -1,5 +1,5 @@
 import subprocess
-from retrieve_persisted import retrieve
+from hybrid_retriever import hybrid_retrieve
 
 SYSTEM_RULES = """You are a question-answering assistant.
 
@@ -9,7 +9,8 @@ Rules (must follow):
 I don't know based on the provided context.
 - When the question asks for a definition/expansion, copy the exact wording from CONTEXT (do not rephrase).
 - Cite sources using ONLY this exact format: [data/doc2.txt] (or other sources exactly as shown in CONTEXT).
-- Do not output any other citation format (do not write 'source:' or 'provided context')."""
+- Do not output any other citation format (do not write 'source:' or 'provided context').
+- Answer the QUESTION directly. Do not answer a different question."""
 
 
 def call_ollama(model:str, prompt: str) -> str:
@@ -21,13 +22,21 @@ def call_ollama(model:str, prompt: str) -> str:
     )
     return result.stdout.strip()
 
+
+def filter_contexts(query: str, contexts: list[dict]) -> list[dict]:
+    q = query.lower()
+    # If question is NOT about "stands for", remove chunks containing "stands for"
+    if ("stand for" not in q) and ("stands for" not in q):
+        contexts = [c for c in contexts if "stands for" not in c["text"].lower()]
+    return contexts
+
+
 def build_prompt(query: str, contexts : list[dict]) -> str:
     ctx_lines = []
     for i, r in enumerate(contexts):
-        chunk_id = r.get('chunk_id', i)  # fallback to index if no chunk_id
-        ctx_lines.append(f"[{r['source']}#{chunk_id}] {r['text']}")
+        ctx_lines.append(f"[{r['source']}#{r['global_id']}] {r['text']}")
     context_block = "\n".join(ctx_lines)
-    allowed_sources = " ".join(sorted({f"[{r['source']}#{r.get('chunk_id', i)}]" for i, r in enumerate(contexts)}))
+    allowed_sources = " ".join(sorted({f"[{r['source']}#{r['global_id']}]" for r in contexts}))
     return f"""{SYSTEM_RULES}
 
 Context:
@@ -42,7 +51,7 @@ Question:
 INSTRUCTION:
 If the QUESTION asks what something "stands for" or asks for a definition, output ONLY the exact phrase from CONTEXT that answers it, followed by one citation.
 
-ANSWER:
+ANSWER (2-3 sentences, with citations):
 """
 
 
@@ -55,38 +64,40 @@ def deterministic_stands_for(query: str , contexts: list[dict]):
         return "I don't know based on the provided context."
     top = contexts[0]
     text = top["text"]
-    print("DEBUG top_text_repr:", repr(text))
-
 
     m = re.search(r"stands for\s+(.+)$", text, flags = re.IGNORECASE)
     if not m :
         return "I don't know based on the provided context." 
     extracted = m.group(1).strip()
-    return f"{extracted} [{top['source']}#{top.get('chunk_id', 0)}]"
+    return f"{extracted} [{top['source']}#{top['global_id']}]"
 
 
 
 
 if __name__ == "__main__":
-    query = "Copy exactly from context: what does RAG stand for?"
-    contexts = retrieve(query , k = 5) # type: ignore
+    query = "What is the role of vector index in RAG?"
+    contexts = hybrid_retrieve(query, top_k=5, faiss_k=10, bm25_k=10, alpha=0.6) # type: ignore
+    contexts = filter_contexts(query, contexts) # type: ignore
+    
     det = deterministic_stands_for(query , contexts) # type: ignore
     if det is not None:
         print("question ", query)
         print("Answer:", det)
         print("sources:")
         for r in contexts: #type: ignore
-            print("- ", f"{r['source']}#{r.get('chunk_id', 0)}")
+            print("- ", f"{r['source']}#{r['global_id']}")
         raise SystemExit(0)
+    
     print("\n retrieved contexts :")
     for r in contexts: # type: ignore
-        print(f"\n[{r['source']}](distance = {r['distance']})")
+        print(f"\n[{r['source']}#{r['global_id']}] (hybrid_score = {r['hybrid_score']:.4f})")
         print(r["text"])
+    
     prompt= build_prompt (query , contexts) # type: ignore
     answer = call_ollama("llama3.2:3b", prompt)
     print("Question:", query)
     print("\nsources:")
     for r in contexts: #type: ignore
-        print(f"- {r['source']}")
+        print(f"- {r['source']}#{r['global_id']}")
     print("\nAnswer:")
     print(answer)

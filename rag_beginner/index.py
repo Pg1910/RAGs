@@ -11,9 +11,10 @@ def build_index(data_dir ="data"):
     docs = load_txt_files(data_dir)
     for d in docs:
         chunks = chunk_text(d["text"], chunk_size = 120 , overlap =30)
-        for c in chunks:
+        for j, c in enumerate(chunks):
             texts.append(c)
-            metadatas.append({"source": d["source"], "chunk_id": len(texts)})
+            metadatas.append({"source": d["source"], "chunk_id": j,
+                              })
 
 
     embeddings = model.encode(texts, convert_to_numpy=True)
